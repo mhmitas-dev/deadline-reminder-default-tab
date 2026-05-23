@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deadline — Track What Matters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f0eff8;
+    --muted: #7878a0;
+    --faint: #3a3a55;
+    --accent: #e24b4a;
+    --accent-glow: rgba(226,75,74,0.2);
+    --amber: #ef9f27;
+    --amber-glow: rgba(239,159,39,0.18);
+    --green: #1d9e75;
+    --green-glow: rgba(29,158,117,0.18);
+    --purple: #7f77dd;
+    --purple-glow: rgba(127,119,221,0.15);
+    --font-mono: 'Space Mono', monospace;
+    --font-sans: 'Sora', sans-serif;
+    --r: 14px;
+    --r-sm: 8px;
+  }
+
+  html { font-size: 16px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Noise grain overlay ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    background-size: 200px;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* ── Ambient glow blobs ── */
+  .blob {
+    position: fixed; border-radius: 50%;
+    filter: blur(100px); pointer-events: none; z-index: 0;
+    transition: background 2s, opacity 2s;
+  }
+  .blob-1 { width: 500px; height: 500px; top: -150px; left: -100px; background: var(--accent-glow); opacity: 0.6; }
+  .blob-2 { width: 400px; height: 400px; bottom: -100px; right: -80px; background: var(--purple-glow); opacity: 0.5; }
+
+  /* ── Layout ── */
+  .app { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; width: 100%; }
+
+  /* ── Top bar ── */
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3rem; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.6;transform:scale(0.85)} }
+  .logo-name { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+  .topbar-right { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+
+  /* ── Empty state ── */
+  .empty-state { text-align: center; padding: 5rem 1rem; }
+  .empty-icon { font-size: 48px; margin-bottom: 1rem; opacity: 0.3; }
+  .empty-title { font-size: 20px; font-weight: 600; color: var(--muted); margin-bottom: 0.5rem; }
+  .empty-sub { font-size: 14px; color: var(--faint); }
+
+  /* ── Main countdown card ── */
+  .main-card {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 2.5rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.5s;
+  }
+  .main-card::after {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  }
+  .main-card.status-ok { border-color: rgba(29,158,117,0.25); }
+  .main-card.status-warn { border-color: rgba(239,159,39,0.3); }
+  .main-card.status-danger { border-color: rgba(226,75,74,0.35); }
+  .main-card.status-done { border-color: rgba(127,119,221,0.3); }
+
+  .card-toprow { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 2rem; gap: 1rem; }
+  .card-name-block {}
+  .card-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .card-name { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; }
+
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 14px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    white-space: nowrap; flex-shrink: 0;
+    border: 1px solid;
+  }
+  .status-pill.ok { background: rgba(29,158,117,0.1); color: #5dcaa5; border-color: rgba(29,158,117,0.25); }
+  .status-pill.warn { background: rgba(239,159,39,0.1); color: #ef9f27; border-color: rgba(239,159,39,0.25); }
+  .status-pill.danger { background: rgba(226,75,74,0.12); color: #e24b4a; border-color: rgba(226,75,74,0.3); }
+  .status-pill.done { background: rgba(127,119,221,0.1); color: #afa9ec; border-color: rgba(127,119,221,0.25); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
+
+  /* ── Countdown digits ── */
+  .countdown { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 2rem; }
+  .cd-unit { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r); padding: 1.25rem 0.5rem 1rem; text-align: center; position: relative; overflow: hidden; }
+  .cd-unit::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; border-radius: 2px; }
+  .cd-unit.ok::before { background: var(--green); box-shadow: 0 0 10px var(--green); }
+  .cd-unit.warn::before { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+  .cd-unit.danger::before { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  .cd-num { font-family: var(--font-mono); font-size: 42px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+  .cd-num.ok { color: #5dcaa5; text-shadow: 0 0 30px rgba(29,158,117,0.4); }
+  .cd-num.warn { color: #ef9f27; text-shadow: 0 0 30px rgba(239,159,39,0.4); }
+  .cd-num.danger { color: #e24b4a; text-shadow: 0 0 30px rgba(226,75,74,0.4); }
+  .cd-label { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-top: 8px; }
+
+  /* ── Overdue state ── */
+  .overdue-block { text-align: center; padding: 1.5rem 0; margin-bottom: 2rem; }
+  .overdue-title { font-family: var(--font-mono); font-size: 36px; color: var(--accent); text-shadow: 0 0 40px rgba(226,75,74,0.5); letter-spacing: 0.06em; }
+  .overdue-sub { font-size: 14px; color: var(--muted); margin-top: 8px; }
+
+  /* ── Progress ── */
+  .progress-section { margin-bottom: 2rem; }
+  .progress-meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .progress-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  .progress-pct { font-family: var(--font-mono); font-size: 20px; font-weight: 700; }
+  .progress-pct.ok { color: #5dcaa5; }
+  .progress-pct.warn { color: #ef9f27; }
+  .progress-pct.danger { color: #e24b4a; }
+
+  .bar-track { background: var(--surface2); border: 1px solid var(--border); border-radius: 999px; height: 12px; overflow: visible; position: relative; }
+  .bar-fill { height: 100%; border-radius: 999px; transition: width 0.8s cubic-bezier(.4,0,.2,1), background 0.5s; position: relative; }
+  .bar-fill.ok { background: linear-gradient(90deg, #085041, #1d9e75); box-shadow: 0 0 16px rgba(29,158,117,0.4); }
+  .bar-fill.warn { background: linear-gradient(90deg, #633806, #ef9f27); box-shadow: 0 0 16px rgba(239,159,39,0.4); }
+  .bar-fill.danger { background: linear-gradient(90deg, #791f1f, #e24b4a); box-shadow: 0 0 16px rgba(226,75,74,0.4); }
+  .bar-thumb {
+    position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 8px currentColor;
+  }
+  .bar-thumb.ok { background: #5dcaa5; color: #5dcaa5; }
+  .bar-thumb.warn { background: #ef9f27; color: #ef9f27; }
+  .bar-thumb.danger { background: #e24b4a; color: #e24b4a; }
+
+  /* ── Stats row ── */
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
+  .stat-item { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.75rem 1rem; }
+  .stat-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+  .stat-value { font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: var(--text); }
+  .stat-value.big { font-size: 22px; }
+
+  /* ── Deadline list ── */
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+
+  .dl-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1.5rem; }
+  .dl-item {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-sm); padding: 12px 16px;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+    gap: 12px;
+  }
+  .dl-item:hover { background: var(--surface2); border-color: var(--border2); }
+  .dl-item.active { border-color: var(--purple); background: rgba(127,119,221,0.06); }
+  .dl-item-left { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+  .dl-item-indicator { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .dl-item-indicator.ok { background: var(--green); }
+  .dl-item-indicator.warn { background: var(--amber); }
+  .dl-item-indicator.danger { background: var(--accent); }
+  .dl-item-indicator.done { background: var(--purple); }
+  .dl-item-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl-item-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .dl-item-days { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+  .dl-item-del { background: none; border: none; cursor: pointer; color: var(--faint); font-size: 16px; line-height: 1; padding: 2px 4px; border-radius: 4px; transition: color 0.15s, background 0.15s; display: flex; align-items: center; }
+  .dl-item-del:hover { color: var(--accent); background: rgba(226,75,74,0.1); }
+
+  /* ── Add form ── */
+  .add-form {
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: var(--r); padding: 1.5rem;
+  }
+  .form-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 1.25rem; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .form-full { grid-column: 1 / -1; }
+  .form-field { display: flex; flex-direction: column; gap: 6px; }
+  .form-field label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+
+  .form-field input {
+    background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--r-sm);
+    color: var(--text); font-family: var(--font-sans); font-size: 14px; font-weight: 500;
+    padding: 10px 14px; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+  }
+  .form-field input:focus { border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-glow); }
+  .form-field input::placeholder { color: var(--faint); }
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+
+  .add-btn {
+    width: 100%; padding: 13px; border: none; border-radius: var(--r-sm);
+    background: var(--accent); color: #fff; font-family: var(--font-sans);
+    font-size: 14px; font-weight: 700; cursor: pointer; letter-spacing: 0.04em;
+    transition: background 0.15s, transform 0.1s, box-shadow 0.2s;
+    box-shadow: 0 4px 20px rgba(226,75,74,0.3);
+  }
+  .add-btn:hover { background: #cc3f3e; box-shadow: 0 4px 28px rgba(226,75,74,0.45); }
+  .add-btn:active { transform: scale(0.98); }
+
+  /* ── Divider ── */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: 999px; padding: 10px 20px;
+    font-size: 13px; font-weight: 600; color: var(--text);
+    opacity: 0; transition: opacity 0.3s, transform 0.3s;
+    z-index: 100; pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    .main-card { padding: 1.5rem; }
+    .card-name { font-size: 20px; }
+    .countdown { gap: 8px; }
+    .cd-num { font-size: 28px; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .form-full { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="blob blob-1" id="blob1"></div>
+<div class="blob blob-2" id="blob2"></div>
+
+<div class="app">
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-dot"></div>
+      <span class="logo-name">Deadline</span>
+    </div>
+    <span class="topbar-right" id="live-clock">--:--:--</span>
+  </div>
+
+  <!-- Main display -->
+  <div id="main-display"></div>
+
+  <hr class="divider">
+
+  <!-- Deadline list -->
+  <div class="section-header">
+    <span class="section-title">All Deadlines</span>
+    <span class="section-title" id="count-label">0 tracked</span>
+  </div>
+  <div id="dl-list" class="dl-list"></div>
+
+  <!-- Add form -->
+  <div class="add-form">
+    <div class="form-title">New Deadline</div>
+    <div class="form-grid">
+      <div class="form-field form-full">
+        <label>Title</label>
+        <input type="text" id="inp-name" placeholder="e.g. Project submission, Tax return…" maxlength="60" autocomplete="off">
+      </div>
+      <div class="form-field">
+        <label>Start Date</label>
+        <input type="date" id="inp-start">
+      </div>
+      <div class="form-field">
+        <label>Deadline</label>
+        <input type="datetime-local" id="inp-end">
+      </div>
+    </div>
+    <button class="add-btn" onclick="addDeadline()">Add Deadline →</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORE = 'dlv2';
+const ACTIVE = 'dlactive';
+
+function load() { try { return JSON.parse(localStorage.getItem(STORE)) || []; } catch { return []; } }
+function save(d) { try { localStorage.setItem(STORE, JSON.stringify(d)); } catch {} }
+function getActive() { try { return localStorage.getItem(ACTIVE); } catch { return null; } }
+function setActive(id) { try { localStorage.setItem(ACTIVE, id); } catch {} }
+
+let deadlines = load();
+let activeId = getActive();
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function now() { return Date.now(); }
+
+function urgency(pct, msLeft) {
+  if (msLeft < 0) return 'done';
+  if (pct >= 85 || msLeft < 86400000) return 'danger';
+  if (pct >= 60 || msLeft < 86400000 * 3) return 'warn';
+  return 'ok';
+}
+
+function fmtDaysLeft(ms) {
+  const d = Math.ceil(ms / 86400000);
+  if (d < 0) return `${Math.abs(d)}d ago`;
+  if (d === 0) return 'today';
+  return `${d}d left`;
+}
+function fmtDate(ms) {
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function fmtDateTime(ms) {
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function addDeadline() {
+  const name = document.getElementById('inp-name').value.trim();
+  const startVal = document.getElementById('inp-start').value;
+  const endVal = document.getElementById('inp-end').value;
+  if (!name) { showToast('Please enter a title'); return; }
+  if (!endVal) { showToast('Please set a deadline date'); return; }
+  const startMs = startVal ? new Date(startVal).getTime() : Date.now();
+  const endMs = new Date(endVal).getTime();
+  if (endMs <= startMs) { showToast('Deadline must be after start'); return; }
+  const id = uid();
+  deadlines.push({ id, name, start: startMs, end: endMs });
+  save(deadlines);
+  activeId = id;
+  setActive(id);
+  document.getElementById('inp-name').value = '';
+  document.getElementById('inp-start').value = '';
+  document.getElementById('inp-end').value = '';
+  showToast('Deadline added');
+  render();
+}
+
+function removeDeadline(id, e) {
+  e.stopPropagation();
+  deadlines = deadlines.filter(d => d.id !== id);
+  save(deadlines);
+  if (activeId === id) {
+    activeId = deadlines.length ? deadlines[deadlines.length - 1].id : null;
+    setActive(activeId);
+  }
+  showToast('Removed');
+  render();
+}
+
+function selectDeadline(id) {
+  activeId = id;
+  setActive(id);
+  render();
+}
+
+function renderMain() {
+  const el = document.getElementById('main-display');
+  if (!deadlines.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">No deadlines yet</div><div class="empty-sub">Add one below to start the countdown</div></div>`;
+    return;
+  }
+
+  const dl = deadlines.find(d => d.id === activeId) || deadlines[deadlines.length - 1];
+  activeId = dl.id;
+
+  const t = now();
+  const msLeft = dl.end - t;
+  const total = dl.end - dl.start;
+  const elapsed = t - dl.start;
+  const pct = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+  const u = urgency(pct, msLeft);
+
+  const pillLabel = { ok: '● On track', warn: '⚠ Watch out', danger: '⚡ Critical', done: '✓ Done' }[u];
+
+  let countdownHTML;
+  if (msLeft < 0) {
+    const overMs = Math.abs(msLeft);
+    const overDays = Math.floor(overMs / 86400000);
+    const overHrs = Math.floor((overMs % 86400000) / 3600000);
+    countdownHTML = `<div class="overdue-block"><div class="overdue-title">OVERDUE</div><div class="overdue-sub">+${overDays} days ${overHrs} hours past deadline</div></div>`;
+  } else {
+    const d = Math.floor(msLeft / 86400000);
+    const h = Math.floor((msLeft % 86400000) / 3600000);
+    const m = Math.floor((msLeft % 3600000) / 60000);
+    const s = Math.floor((msLeft % 60000) / 1000);
+    countdownHTML = `<div class="countdown">
+      <div class="cd-unit ${u}"><div class="cd-num ${u}" id="cd-d">${pad2(d)}</div><div class="cd-label">Days</div></div>
+      <div class="cd-unit ${u}"><div class="cd-num ${u}" id="cd-h">${pad2(h)}</div><div class="cd-label">Hours</div></div>
+      <div class="cd-unit ${u}"><div class="cd-num ${u}" id="cd-m">${pad2(m)}</div><div class="cd-label">Minutes</div></div>
+      <div class="cd-unit ${u}"><div class="cd-num ${u}" id="cd-s">${pad2(s)}</div><div class="cd-label">Seconds</div></div>
+    </div>`;
+  }
+
+  const daysTotal = Math.round(total / 86400000);
+  const daysLeft = Math.max(0, Math.ceil(msLeft / 86400000));
+
+  el.innerHTML = `<div class="main-card status-${u}">
+    <div class="card-toprow">
+      <div class="card-name-block">
+        <div class="card-eyebrow">Active Deadline</div>
+        <div class="card-name">${dl.name}</div>
+      </div>
+      <span class="status-pill ${u}"><span class="status-dot"></span>${pillLabel}</span>
+    </div>
+    ${countdownHTML}
+    <div class="progress-section">
+      <div class="progress-meta">
+        <span class="progress-label">Time Elapsed</span>
+        <span class="progress-pct ${u}">${pct}%</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill ${u}" id="dl-bar" style="width:${pct}%">
+          ${pct > 4 ? `<div class="bar-thumb ${u}"></div>` : ''}
+        </div>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-item"><div class="stat-label">Started</div><div class="stat-value">${fmtDate(dl.start)}</div></div>
+      <div class="stat-item"><div class="stat-label">Deadline</div><div class="stat-value">${fmtDateTime(dl.end)}</div></div>
+      <div class="stat-item"><div class="stat-label">Days Left</div><div class="stat-value big">${daysLeft}</div></div>
+      <div class="stat-item"><div class="stat-label">Total Days</div><div class="stat-value big">${daysTotal}</div></div>
+    </div>
+  </div>`;
+
+  // Update blob color based on urgency
+  const blobColors = { ok: 'rgba(29,158,117,0.15)', warn: 'rgba(239,159,39,0.15)', danger: 'rgba(226,75,74,0.18)', done: 'rgba(127,119,221,0.15)' };
+  document.getElementById('blob1').style.background = blobColors[u];
+}
+
+function renderList() {
+  const el = document.getElementById('dl-list');
+  const countEl = document.getElementById('count-label');
+  countEl.textContent = `${deadlines.length} tracked`;
+
+  if (!deadlines.length) {
+    el.innerHTML = '';
+    return;
+  }
+
+  el.innerHTML = deadlines.map(d => {
+    const msLeft = d.end - now();
+    const total = d.end - d.start;
+    const elapsed = now() - d.start;
+    const pct = Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
+    const u = urgency(pct, msLeft);
+    const isActive = d.id === activeId;
+    return `<div class="dl-item ${isActive ? 'active' : ''}" onclick="selectDeadline('${d.id}')">
+      <div class="dl-item-left">
+        <span class="dl-item-indicator ${u}"></span>
+        <span class="dl-item-name">${d.name}</span>
+      </div>
+      <div class="dl-item-right">
+        <span class="dl-item-days">${fmtDaysLeft(msLeft)}</span>
+        <button class="dl-item-del" onclick="removeDeadline('${d.id}', event)" title="Remove">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function render() {
+  renderMain();
+  renderList();
+}
+
+function tickSecond() {
+  const active = deadlines.find(d => d.id === activeId);
+  if (!active) return;
+  const msLeft = active.end - now();
+  if (msLeft <= 0) { render(); return; }
+  const s = Math.floor((msLeft % 60000) / 1000);
+  const m = Math.floor((msLeft % 3600000) / 60000);
+  const h = Math.floor((msLeft % 86400000) / 3600000);
+  const d = Math.floor(msLeft / 86400000);
+  const sd = document.getElementById('cd-s');
+  const sm = document.getElementById('cd-m');
+  const sh = document.getElementById('cd-h');
+  const sd2 = document.getElementById('cd-d');
+  if (sd) sd.textContent = pad2(s);
+  if (sm) sm.textContent = pad2(m);
+  if (sh) sh.textContent = pad2(h);
+  if (sd2) sd2.textContent = pad2(d);
+}
+
+function tickClock() {
+  const now2 = new Date();
+  document.getElementById('live-clock').textContent =
+    pad2(now2.getHours()) + ':' + pad2(now2.getMinutes()) + ':' + pad2(now2.getSeconds());
+}
+
+// Init default start date
+const todayStr = new Date().toISOString().split('T')[0];
+document.getElementById('inp-start').value = todayStr;
+
+render();
+setInterval(tickSecond, 1000);
+setInterval(tickClock, 1000);
+setInterval(() => renderList(), 60000);
+tickClock();
+</script>
+</body>
+</html>
